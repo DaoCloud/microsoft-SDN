@@ -3,6 +3,8 @@ Param(
     [parameter(Mandatory = $false)] $KubeDnsServiceIP="10.96.0.10",
     [parameter(Mandatory = $false)] $LogDir = "C:\k",
     [parameter(Mandatory = $false)] $KubeletFeatureGates = "",
+    [parameter(Mandatory = $false)] $ScriptsDir = "c:\k\scripts",
+    [parameter(Mandatory = $false)] $KubernetessDir = "c:\k\kubernetes",
     [switch] $RegisterOnly
 )
 
@@ -12,10 +14,10 @@ if ((Test-Path env:GITHUB_SDN_REPOSITORY) -and ($env:GITHUB_SDN_REPOSITORY -ne '
     $GithubSDNRepository = $env:GITHUB_SDN_REPOSITORY
 }
 
-$helper = "c:\k\helper.psm1"
+$helper = "$ScriptsDir\helper.psm1"
 if (!(Test-Path $helper))
 {
-    Start-BitsTransfer "https://raw.githubusercontent.com/$GithubSDNRepository/master/Kubernetes/windows/helper.psm1" -Destination c:\k\helper.psm1
+    Start-BitsTransfer "https://raw.githubusercontent.com/$GithubSDNRepository/master/Kubernetes/windows/helper.psm1" -Destination "$helper"
 }
 ipmo $helper
 
@@ -28,7 +30,7 @@ if ($RegisterOnly.IsPresent)
 $kubeletArgs = @(
     "--hostname-override=$(hostname)"
     '--v=6'
-    '--pod-infra-container-image=mcr.microsoft.com/k8s/core/pause:1.0.0'
+    '--pod-infra-container-image=kubeletwin/pause'
     '--resolv-conf=""'
     '--allow-privileged=true'
     '--enable-debugging-handlers'

@@ -126,9 +126,9 @@ function WaitForNetwork($NetworkName)
     }
 }
 
-function IsNodeRegistered()
+function IsNodeRegistered($KubeletPath= "c:\k")
 {
-    c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower())
+    c:\k\kubernetes\kubectl.exe --kubeconfig=c:\k\kubernetes\configs\config get nodes/$($(hostname).ToLower())
     return (!$LASTEXITCODE)
 }
 
@@ -136,12 +136,12 @@ function RegisterNode($UseCRI = $false)
 {
     if (!(IsNodeRegistered))
     {
-        $argList = @("--hostname-override=$(hostname)","--pod-infra-container-image=kubeletwin/pause","--resolv-conf=""""", "--cgroups-per-qos=false", "--enforce-node-allocatable=""""","--kubeconfig=c:\k\config")
+        $argList = @("--hostname-override=$(hostname)","--pod-infra-container-image=kubeletwin/pause","--resolv-conf=""""", "--cgroups-per-qos=false", "--enforce-node-allocatable=""""","--kubeconfig=c:\k\kubernetes\configs\config")
         if($UseCRI)
         {
             $argList += @("--container-runtime=remote", "--container-runtime-endpoint=npipe:////./pipe/containerd-containerd")
         }
-        $process = Start-Process -FilePath c:\k\kubelet.exe -PassThru -ArgumentList $argList
+        $process = Start-Process -FilePath c:\k\kubernetes\kubelet.exe -PassThru -ArgumentList $argList
 
         # Wait till the 
         while (!(IsNodeRegistered))

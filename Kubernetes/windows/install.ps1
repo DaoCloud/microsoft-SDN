@@ -4,7 +4,9 @@ Param(
     [parameter(Mandatory = $false)] $KubeDnsServiceIP="10.96.0.10",
     [parameter(Mandatory = $false)] $serviceCIDR="10.96.0.0/12",
     [parameter(Mandatory = $false)] $InterfaceName="Ethernet",
-    [parameter(Mandatory = $false)] $LogDir = "C:\k"
+    [parameter(Mandatory = $false)] $LogDir = "C:\k",
+    [parameter(Mandatory = $false)] $ScriptsDir = "c:\k\scripts",
+    [parameter(Mandatory = $false)] $CnidDir = "c:\k\cni"
 )
 
 $GithubSDNRepository = 'Microsoft/SDN'
@@ -32,8 +34,8 @@ function SetupDirectories($LogDir)
 function CopyFiles()
 {
     Write-Host "Copying Flannel setup files"
-    cp $BaseDir\flanneld.exe c:\flannel\flanneld.exe
-    cp $BaseDir\net-conf.json C:\etc\kube-flannel\net-conf.json
+    cp "$CnidDir\flanneld.exe" c:\flannel\flanneld.exe
+    cp "$CnidDir\config\net-conf.json" C:\etc\kube-flannel\net-conf.json
 }
 
 function DownloadFlannelBinaries()
@@ -79,33 +81,31 @@ function DownloadAllFiles($NetworkMode)
 # Setup directories
 $BaseDir = "c:\k"
 $NetworkMode = $NetworkMode.ToLower()
-$helper = "c:\k\helper.psm1"
+$helper = "$ScriptsDir\helper.psm1"
 
 if (!(Test-Path $helper))
 {
-    Start-BitsTransfer "https://raw.githubusercontent.com/$GithubSDNRepository/master/Kubernetes/windows/helper.psm1" -Destination c:\k\helper.psm1
+    Start-BitsTransfer "https://raw.githubusercontent.com/$GithubSDNRepository/master/Kubernetes/windows/helper.psm1" -Destination "$helper"
 }
 ipmo $helper
 
 SetupDirectories($LogDir)
 
 # Download files into Kubernetes base directory
-DownloadAllFiles($NetworkMode)
+# DownloadAllFiles($NetworkMode)
 
 # Copy files into runtime directories
 CopyFiles
 
 # Prepare Network
-ipmo C:\k\hns.psm1
+ipmo $ScriptsDir\hns.psm1
 CleanupOldNetwork $NetworkName
 CreateExternalNetwork $NetworkMode
 Start-Sleep 10
 
 # Update CNI config files
 # Todo : Get these values using kubectl
-$WorkingDir = "c:\k"
-$CNIPath = [Io.path]::Combine($WorkingDir , "cni")
-$CNIConfig = [Io.path]::Combine($CNIPath, "config", "cni.conf")
-$NetConfig = [Io.path]::Combine($WorkingDir , "net-conf.json")
+$CNIConfig = [Io.path]::Combine($CnidDir, "config", "cni.conf")
+$NetConfig = [Io.path]::Combine($CnidDir, "config", "net-conf.json")
 Update-CNIConfig $CNIConfig $clusterCIDR $KubeDnsServiceIP $serviceCIDR $InterfaceName $NetworkName $NetworkMode
 Update-NetConfig $NetConfig $clusterCIDR $NetworkName $NetworkMode

@@ -1,19 +1,24 @@
 ﻿Param(
     [parameter(Mandatory = $true)] $ManagementIP,
+    [parameter(Mandatory = $true)] $ControllerIP,
     [ValidateSet("l2bridge", "overlay",IgnoreCase = $true)] [parameter(Mandatory = $false)] $NetworkMode="l2bridge",
     [parameter(Mandatory = $false)] $ClusterCIDR="10.244.0.0/16",
     [parameter(Mandatory = $false)] $KubeDnsServiceIP="10.96.0.10",
     [parameter(Mandatory = $false)] $ServiceCIDR="10.96.0.0/12",
     [parameter(Mandatory = $false)] $InterfaceName="Ethernet",
-    [parameter(Mandatory = $false)] $LogDir = "C:\k",
+    [parameter(Mandatory = $false)] $LogDir = "C:\k\logs",
+    [parameter(Mandatory = $false)] $DeployAsService = $false,
+    [parameter(Mandatory = $false)] $KubeletSvc="kubelet",
+    [parameter(Mandatory = $false)] $KubeProxySvc="kube-proxy",
+    [parameter(Mandatory = $false)] $FlanneldSvc="flanneld",
     [parameter(Mandatory = $false)] $KubeletFeatureGates = ""
 )
 
-$BaseDir = "c:\k"
 $NetworkMode = $NetworkMode.ToLower()
 $NetworkName = "cbr0"
 
-$GithubSDNRepository = 'Microsoft/SDN'
+$ScriptsDir = "c:\k\scripts"
+$GithubSDNRepository = 'microsoft-SDN'
 if ((Test-Path env:GITHUB_SDN_REPOSITORY) -and ($env:GITHUB_SDN_REPOSITORY -ne ''))
 {
     $GithubSDNRepository = $env:GITHUB_SDN_REPOSITORY
@@ -24,26 +29,57 @@ if ($NetworkMode -eq "overlay")
     $NetworkName = "vxlan0"
 }
 
+if (!(Test-Path $LogDir))
+{
+    mkdir $LogDir
+}
+
+# generate dce-engine config
+c:\k\dce\dce-engine.exe config --controller_addr $ControllerIP --management_ip $ManagementIP
+
 # Use helpers to setup binaries, conf files etc.
-$helper = "c:\k\helper.psm1"
+$helper = "$ScriptsDir\helper.psm1"
 if (!(Test-Path $helper))
 {
-    Start-BitsTransfer "https://raw.githubusercontent.com/$GithubSDNRepository/master/Kubernetes/windows/helper.psm1" -Destination c:\k\helper.psm1
+    Start-BitsTransfer "https://raw.githubusercontent.com/$GithubSDNRepository/master/Kubernetes/windows/helper.psm1" -Destination "$helper"
 }
 ipmo $helper
 
-$install = "c:\k\install.ps1"
+$install = "$ScriptsDir\install.ps1"
 if (!(Test-Path $install))
 {
-    Start-BitsTransfer "https://raw.githubusercontent.com/$GithubSDNRepository/master/Kubernetes/windows/install.ps1" -Destination c:\k\install.ps1
+    Start-BitsTransfer "https://raw.githubusercontent.com/$GithubSDNRepository/master/Kubernetes/windows/install.ps1" -Destination "$install"
 }
 
 # Download files, move them, & prepare network
-powershell $install -NetworkMode "$NetworkMode" -clusterCIDR "$ClusterCIDR" -KubeDnsServiceIP "$KubeDnsServiceIP" -serviceCIDR "$ServiceCIDR" -InterfaceName "'$InterfaceName'" -LogDir "$LogDir"
+powershell $install -NetworkMode $NetworkMode -clusterCIDR $ClusterCIDR -KubeDnsServiceIP $KubeDnsServiceIP -serviceCIDR $ServiceCIDR -InterfaceName $InterfaceName -LogDir $LogDir
 
 # Register node
-powershell $BaseDir\start-kubelet.ps1 -RegisterOnly -NetworkMode $NetworkMode
-ipmo C:\k\hns.psm1
+powershell $ScriptsDir\start-kubelet.ps1 -RegisterOnly -NetworkMode $NetworkMode
+ipmo $ScriptsDir\hns.psm1
+
+Start-Sleep 10
+
+if($DeployAsService){
+    $registersceArgs = @(
+        "$ScriptsDir\register-svc.ps1"
+        "-ManagementIP $ManagementIP"
+        "-NetworkMode $NetworkMode"
+        "-ClusterCIDR $ClusterCIDR"
+        "-KubeDnsServiceIP $KubeDnsServiceIP"
+        "-LogDir $LogDir"
+        "-KubeletSvc $KubeletSvc"
+        "-KubeProxySvc $KubeProxySvc"
+        "-FlanneldSvc $FlanneldSvc"
+    )
+    start powershell -ArgumentList  " -File  $registersceArgs "
+    if ($NetworkMode -eq "overlay")
+    {
+        GetSourceVip -ipAddress $ManagementIP -NetworkName $NetworkName
+    }
+    Start-Sleep 3
+    exit
+}
 
 # Start Infra services
 # Start Flanneld
@@ -55,7 +91,7 @@ if ($NetworkMode -eq "overlay")
 }
 
 # Start kubelet
-$startKubeletArgs = "-File $BaseDir\start-kubelet.ps1 -NetworkMode $NetworkMode -KubeDnsServiceIP $KubeDnsServiceIP -LogDir $LogDir"
+$startKubeletArgs = "-File $ScriptsDir\start-kubelet.ps1 -NetworkMode $NetworkMode -KubeDnsServiceIP $KubeDnsServiceIP -LogDir $LogDir"
 if ($KubeletFeatureGates -ne "")
 {
     $startKubeletArgs += " -KubeletFeatureGates $KubeletFeatureGates"
@@ -64,4 +100,4 @@ Start powershell -ArgumentList $startKubeletArgs
 Start-Sleep 10
 
 # Start kube-proxy
-start powershell -ArgumentList " -File $BaseDir\start-kubeproxy.ps1 -NetworkMode $NetworkMode -clusterCIDR $ClusterCIDR -NetworkName $NetworkName -LogDir $LogDir"
+start powershell -ArgumentList " -File $ScriptsDir\start-kubeproxy.ps1 -NetworkMode $NetworkMode -clusterCIDR $ClusterCIDR -NetworkName $NetworkName -LogDir $LogDir"
