@@ -6,7 +6,7 @@
     [parameter(Mandatory = $false)] $KubeDnsServiceIP="10.96.0.10",
     [parameter(Mandatory = $false)] $ServiceCIDR="10.96.0.0/12",
     [parameter(Mandatory = $false)] $InterfaceName="Ethernet",
-    [parameter(Mandatory = $false)] $LogDir = "C:\k\logs",
+    [parameter(Mandatory = $false)] $LogDir = "C:\logs",
     [parameter(Mandatory = $false)] $DeployAsService = $false,
     [parameter(Mandatory = $false)] $KubeletSvc="kubelet",
     [parameter(Mandatory = $false)] $KubeProxySvc="kube-proxy",
@@ -34,8 +34,13 @@ if (!(Test-Path $LogDir))
     mkdir $LogDir
 }
 
+$env:path += ";c:\k\utils;c:\k\dce;"
+$newPath = "c:\k\utils;c:\k\dce;" +[Environment]::GetEnvironmentVariable("PATH",[EnvironmentVariableTarget]::Machine)
+[Environment]::SetEnvironmentVariable("PATH", $newPath,[EnvironmentVariableTarget]::Machine)
+
+
 # generate dce-engine config
-c:\k\dce\dce-engine.exe config --controller_addr $ControllerIP --management_ip $ManagementIP
+dce-engine config --controller_addr $ControllerIP --management_ip $ManagementIP
 
 # Use helpers to setup binaries, conf files etc.
 $helper = "$ScriptsDir\helper.psm1"
@@ -59,6 +64,8 @@ powershell $ScriptsDir\start-kubelet.ps1 -RegisterOnly -NetworkMode $NetworkMode
 ipmo $ScriptsDir\hns.psm1
 
 Start-Sleep 10
+
+start powershell $ScriptsDir\InstallImages.ps1
 
 if($DeployAsService){
     $registersceArgs = @(

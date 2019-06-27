@@ -27,20 +27,19 @@ cd $NssmDir
 # register flanneld
 CleanupOldNetwork -NetworkName $NetworkName
 
-.\nssm.exe install $FlanneldSvc $CnidDir\flanneld.exe
-.\nssm.exe set $FlanneldSvc AppParameters --kubeconfig-file=$KubeConfigsDir\config --iface=$ManagementIP --ip-masq=1 --kube-subnet-mgr=1
-.\nssm.exe set $FlanneldSvc AppEnvironmentExtra NODE_NAME=$Hostname
-.\nssm.exe set $FlanneldSvc AppDirectory $CnidDir
-.\nssm.exe set $FlanneldSvc AppStdout $LogDir\$FlanneldSvc.log
-.\nssm.exe set $FlanneldSvc AppStderr $LogDir\$FlanneldSvc.log
-.\nssm.exe start $FlanneldSvc
+nssm install $FlanneldSvc $CnidDir\flanneld.exe
+nssm set $FlanneldSvc AppParameters --kubeconfig-file=$KubeConfigsDir\config --iface=$ManagementIP --ip-masq=1 --kube-subnet-mgr=1
+nssm set $FlanneldSvc AppEnvironmentExtra NODE_NAME=$Hostname
+nssm set $FlanneldSvc AppDirectory $CnidDir
+nssm set $FlanneldSvc AppStdout $LogDir\$FlanneldSvc.log
+nssm set $FlanneldSvc AppStderr $LogDir\$FlanneldSvc.log
+nssm start $FlanneldSvc
 
 Start-Sleep 2
 
 WaitForNetwork -NetworkName $NetworkName
 
-
-Start-Sleep 2
+Start-Sleep 1
 
 if ($NetworkMode -eq "overlay")
 {
@@ -49,14 +48,13 @@ if ($NetworkMode -eq "overlay")
 
 
 # register kubelet
-.\nssm.exe install $KubeletSvc $KubernetessDir\kubelet.exe
+nssm install $KubeletSvc $KubernetessDir\kubelet.exe
 
 $kubeletArgs = @(
     "--hostname-override=$(hostname)"
     '--v=6'
     '--pod-infra-container-image=kubeletwin/pause'
     '--resolv-conf=""'
-    '--allow-privileged=true'
     '--enable-debugging-handlers'
     "--cluster-dns=$KubeDnsServiceIp"
     '--cluster-domain=cluster.local'
@@ -65,6 +63,7 @@ $kubeletArgs = @(
     '--image-pull-progress-deadline=20m'
     '--cgroups-per-qos=false'
     "--log-dir=$LogDir"
+    "--log_file=$LogDir\kubelet.log"
     '--logtostderr=false'
     '--enforce-node-allocatable=""'
     '--network-plugin=cni'
@@ -77,21 +76,31 @@ if ($KubeletFeatureGates -ne "")
     $kubeletArgs += "--feature-gates=$KubeletFeatureGates"
 }
 
-.\nssm.exe set $KubeletSvc AppParameters $kubeletArgs
-.\nssm.exe set $KubeletSvc AppDirectory $KubernetessDir
-.\nssm.exe set $KubeletSvc Start SERVICE_DELAYED_START
-.\nssm.exe start $KubeletSvc
+nssm set $KubeletSvc AppParameters $kubeletArgs
+nssm set $KubeletSvc AppDirectory $KubernetessDir
+nssm set $KubeletSvc Start SERVICE_DELAYED_START
+nssm start $KubeletSvc
 
 Start-Sleep 2
 
 # register kube-proxy
-.\nssm.exe install $KubeProxySvc $KubernetessDir\kube-proxy.exe
-.\nssm.exe set $KubeProxySvc AppDirectory $KubernetessDir
+nssm install $KubeProxySvc $KubernetessDir\kube-proxy.exe
+nssm set $KubeProxySvc AppDirectory $KubernetessDir
+$kubeproxyArgs = @(
+    '--v=4'
+    '--proxy-mode=kernelspace'
+    "--hostname-override=$(hostname)"
+    "--kubeconfig=$KubeConfigsDir\config"
+    "--cluster-cidr=$ClusterCIDR"
+    "--log-dir=$LogDir"
+    "--log-file=$LogDir\kube-proxy.log"
+    '--logtostderr=false'
+    )
 
 if ($NetworkMode -eq "l2bridge")
 {
-    .\nssm.exe set $KubeProxySvc AppEnvironmentExtra KUBE_NETWORK=cbr0
-    .\nssm.exe set $KubeProxySvc AppParameters --v=4 --proxy-mode=kernelspace --hostname-override=$Hostname --kubeconfig=$KubeConfigsDir\config --cluster-cidr=$ClusterCIDR --log-dir=$LogDir --logtostderr=false
+    $env:KUBE_NETWORK=$networkName
+    nssm set $KubeProxySvc AppEnvironmentExtra KUBE_NETWORK=$networkName
 }
 elseif ($NetworkMode -eq "overlay")
 {
@@ -100,28 +109,32 @@ elseif ($NetworkMode -eq "overlay")
         $sourceVipJSON = Get-Content sourceVip.json | ConvertFrom-Json 
         $sourceVip = $sourceVipJSON.ip4.ip.Split("/")[0]
     }
-    .\nssm.exe set $KubeProxySvc AppParameters --v=4 --proxy-mode=kernelspace --feature-gates="WinOverlay=true" --hostname-override=$Hostname --kubeconfig=$KubeConfigsDir\config --network-name=vxlan0 --source-vip=$sourceVip --enable-dsr=false --cluster-cidr=$ClusterCIDR --log-dir=$LogDir --logtostderr=false
+    $kubeproxyArgs += @(
+        '--feature-gates="WinOverlay=true"'
+        '--network-name=vxlan0'
+        "--source-vip=$sourceVip"
+        '--enable-dsr=false'
+        )
 }
-.\nssm.exe set $KubeProxySvc DependOnService $KubeletSvc
-.\nssm.exe set $KubeProxySvc Start SERVICE_DELAYED_START
-.\nssm.exe start $KubeProxySvc
+
+nssm set $KubeProxySvc AppParameters $kubeproxyArgs
+nssm set $KubeProxySvc DependOnService $KubeletSvc
+nssm set $KubeProxySvc Start SERVICE_DELAYED_START
+nssm start $KubeProxySvc
 
 Start-Sleep 2
 
 
 
 # register dce-engine
-.\nssm.exe install $DceEngineSvc C:\k\dce\dce-engine.exe
-.\nssm.exe set $DceEngineSvc AppParameters install
-.\nssm.exe set $DceEngineSvc AppDirectory C:\k\dce
-.\nssm.exe set $DceEngineSvc AppStdout $LogDir\dce-engine.log
-.\nssm.exe set $DceEngineSvc AppStderr $LogDir\dce-engine.log
-.\nssm.exe set $DceEngineSvc DependOnService docker
-.\nssm.exe set $DceEngineSvc Start SERVICE_DELAYED_START
-.\nssm.exe start $DceEngineSvc
-
-$env:path += ";c:\k\dce"
-$newPath = "c:\k\dce;" +[Environment]::GetEnvironmentVariable("PATH",[EnvironmentVariableTarget]::Machine)
-[Environment]::SetEnvironmentVariable("PATH", $newPath,[EnvironmentVariableTarget]::Machine)
+nssm install $DceEngineSvc C:\k\dce\dce-engine.exe
+nssm set $DceEngineSvc AppParameters install
+nssm set $DceEngineSvc AppDirectory C:\k\dce
+nssm set $DceEngineSvc AppStdout $LogDir\dce-engine.log
+nssm set $DceEngineSvc AppStderr $LogDir\dce-engine.log
+nssm set $DceEngineSvc DependOnService docker
+nssm set $DceEngineSvc Start SERVICE_DELAYED_START
+nssm start $DceEngineSvc
+ 
 
 Start-Sleep 2

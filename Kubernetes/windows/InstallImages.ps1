@@ -1,5 +1,5 @@
  
-$BaseDir = "c:\k"
+$BaseDir = "c:\k\scripts"
 
 # Prepare POD infra Images
 function tagImage
