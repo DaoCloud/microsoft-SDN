@@ -78,7 +78,7 @@ if ($KubeletFeatureGates -ne "")
 
 nssm set $KubeletSvc AppParameters $kubeletArgs
 nssm set $KubeletSvc AppDirectory $KubernetessDir
-nssm set $KubeletSvc Start SERVICE_DELAYED_START
+nssm set $KubeletSvc Start SERVICE_DELAYED_AUTO_START
 nssm start $KubeletSvc
 
 Start-Sleep 2
@@ -119,7 +119,7 @@ elseif ($NetworkMode -eq "overlay")
 
 nssm set $KubeProxySvc AppParameters $kubeproxyArgs
 nssm set $KubeProxySvc DependOnService $KubeletSvc
-nssm set $KubeProxySvc Start SERVICE_DELAYED_START
+nssm set $KubeProxySvc Start SERVICE_DELAYED_AUTO_START
 nssm start $KubeProxySvc
 
 Start-Sleep 2
@@ -133,7 +133,7 @@ nssm set $DceEngineSvc AppDirectory C:\k\dce
 nssm set $DceEngineSvc AppStdout $LogDir\dce-engine.log
 nssm set $DceEngineSvc AppStderr $LogDir\dce-engine.log
 nssm set $DceEngineSvc DependOnService docker
-nssm set $DceEngineSvc Start SERVICE_DELAYED_START
+nssm set $DceEngineSvc Start SERVICE_DELAYED_AUTO_START
 nssm start $DceEngineSvc
  
 
