@@ -84,7 +84,13 @@ if($DeployAsService){
     {
         GetSourceVip -ipAddress $ManagementIP -NetworkName $NetworkName
     }
-    Start-Sleep 3
+    Start-Sleep 5
+
+    echo 'add smb drivers to kubelet-plugins dirctories'
+    
+    # 添加 smb 存储驱动到指定目录
+    mv c:\k\smb_driver\* C:\usr\libexec\kubernetes\kubelet-plugins\volume\exec\
+
     exit
 }
 
