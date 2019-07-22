@@ -2,8 +2,8 @@
     [parameter(Mandatory = $true)] $ManagementIP,
     [parameter(Mandatory = $true)] $ControllerIP,
     [ValidateSet("l2bridge", "overlay",IgnoreCase = $true)] [parameter(Mandatory = $false)] $NetworkMode="l2bridge",
-    [parameter(Mandatory = $false)] $ClusterCIDR="10.244.0.0/16",
-    [parameter(Mandatory = $false)] $KubeDnsServiceIP="10.96.0.10",
+    [parameter(Mandatory = $false)] $ClusterCIDR="172.28.0.0/16",
+    [parameter(Mandatory = $false)] $KubeDnsServiceIP="10.96.0.2",
     [parameter(Mandatory = $false)] $ServiceCIDR="10.96.0.0/12",
     [parameter(Mandatory = $false)] $InterfaceName="Ethernet",
     [parameter(Mandatory = $false)] $LogDir = "C:\logs",
@@ -88,10 +88,24 @@ if($DeployAsService){
 
     echo 'add smb drivers to kubelet-plugins dirctories'
     
-    # 添加 smb 存储驱动到指定目录
-    mv c:\k\smb_driver\* C:\usr\libexec\kubernetes\kubelet-plugins\volume\exec\
+    $max_try_count = 5
+    while ($max_try_count -gt 0) {
+        # 添加 smb 存储驱动到指定目录,如果'C:\usr\libexec\kubernetes\kubelet-plugins\volume\exec\' 不存在，说明kubelet还没有准备好，重试几次
+        if(Test-Path 'C:\usr\libexec\kubernetes\kubelet-plugins\volume\exec\'){
+            mv c:\k\smb_driver\* C:\usr\libexec\kubernetes\kubelet-plugins\volume\exec\
+            exit
+        }else {
+            if($max_try_count==1){
+                throw ("The kubelet plugins dir is not exist, please check the kubelet and copy smb drivers manual")
+                exit
+            }
+            echo "waiting the kubelet create the plugins dir -------------$max_try_count"
+            Start-Sleep (6 - $max_try_count) * 2
+            $max_try_count -= 1
+        }
+    }
 
-    exit
+    
 }
 
 # Start Infra services
