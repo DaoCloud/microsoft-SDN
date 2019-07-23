@@ -95,12 +95,12 @@ if($DeployAsService){
             mv c:\k\smb_driver\* C:\usr\libexec\kubernetes\kubelet-plugins\volume\exec\
             exit
         }else {
-            if($max_try_count==1){
+            if($max_try_count -eq 1){
                 throw ("The kubelet plugins dir is not exist, please check the kubelet and copy smb drivers manual")
                 exit
             }
             echo "waiting the kubelet create the plugins dir -------------$max_try_count"
-            Start-Sleep (6 - $max_try_count) * 2
+            Start-Sleep ((6 - $max_try_count) * 2)
             $max_try_count -= 1
         }
     }
